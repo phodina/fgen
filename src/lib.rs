@@ -20,6 +20,44 @@ mod generator {
 	use super::*;
 
 	#[no_mangle]
+	pub extern fn context_new () -> *mut Context {
+
+    	Box::into_raw(Box::new(Context::new()))
+	}
+
+	#[no_mangle]
+	pub extern fn context_add (ptr: *mut Context, key: *const libc::c_char, value: *const libc::c_char) {
+		
+		let key = unsafe {
+            assert!(!key.is_null());
+            CStr::from_ptr(key)
+        	};
+
+		let key_str = key.to_str().unwrap().to_string();
+
+		let value = unsafe {
+            assert!(!value.is_null());
+            CStr::from_ptr(value)
+        	};
+
+		let value_str = value.to_str().unwrap().to_string();
+
+		let context = unsafe {
+            assert!(!ptr.is_null());
+            &mut *ptr
+			};
+
+		context.add(&key_str, &value_str);
+	}
+	
+	#[no_mangle]
+	pub extern fn context_free (ptr: *mut Context) {
+	
+		if ptr.is_null() { return }
+	    		unsafe { Box::from_raw(ptr); }
+			}
+
+	#[no_mangle]
 	pub extern fn generator_new(project_path : *const libc::c_char, template_path : *const libc::c_char) -> *mut Generator {
     
     	let project_path = unsafe {
@@ -40,7 +78,7 @@ mod generator {
 	}
 
 	#[no_mangle]
-	pub extern fn generate_file(ptr: *mut Generator, src_path : *const libc::c_char, dst_path : *const libc::c_char) {
+	pub extern fn generate_file(ptr: *mut Generator, context: *mut Context, src_path : *const libc::c_char, dst_path : *const libc::c_char) {
 
 		let src_path = unsafe {
             assert!(!src_path.is_null());
@@ -61,7 +99,10 @@ mod generator {
             &mut *ptr
 			};
 
-		let context = Context::new();
+		let context = unsafe {
+            assert!(!context.is_null());
+            &*context
+			};
 		
 		generator.generate_file(context, src_path_str, dst_path_str);
 	}
@@ -125,7 +166,7 @@ impl Generator {
 		self.project_path.to_str().unwrap()
 	}
 
-	fn generate_file(&self, context : Context, src_path : &str, dst_path : &str) -> Result<(), GenError>{
+	fn generate_file(&self, context : &Context, src_path : &str, dst_path : &str) -> Result<(), GenError>{
 
 		let mut src_patha = self.template_path.clone();
 		let mut dst_patha = self.project_path.clone();
@@ -193,7 +234,7 @@ mod tests {
 
     	let generator = Generator::new(project_path, template_path);
 
-    	assert!(generator.generate_file(context, src_path, dst_path).is_err());
+    	assert!(generator.generate_file(&context, src_path, dst_path).is_err());
     }
 
     #[test]
