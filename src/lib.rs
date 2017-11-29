@@ -10,6 +10,8 @@ use tera::Context;
 use std::path::PathBuf;
 use std::error::Error;
 use std::fmt;
+use std::io::prelude::*;
+use std::fs::File;
 
 pub use generator::*;
 
@@ -59,7 +61,9 @@ mod generator {
             &mut *ptr
 			};
 
-		generator.generate_file(src_path_str, dst_path_str);
+		let context = Context::new();
+		
+		generator.generate_file(context, src_path_str, dst_path_str);
 	}
 
 	#[no_mangle]
@@ -95,16 +99,20 @@ impl Error for GenError {
 
 pub struct Generator {
 	project_path:  PathBuf,
-	template_path: PathBuf
+	template_path: PathBuf,
+	tera: Tera
 }
 
 impl Generator {
 
 	fn new (project_path : &str, template_path : &str) -> Self {
 
-	Generator { project_path: PathBuf::from(project_path),
-				template_path: PathBuf::from(template_path) 
-				}
+    	let tera = compile_templates!("templates/**/*");
+
+		Generator { project_path: PathBuf::from(project_path),
+					template_path: PathBuf::from(template_path),
+					tera : tera 
+					}
 	}
 
 	fn get_template_path (&self) -> &str {
@@ -117,24 +125,40 @@ impl Generator {
 		self.project_path.to_str().unwrap()
 	}
 
-	fn generate_file(&self, src_path : &str, dst_path : &str) -> Result<(), GenError>{
+	fn generate_file(&self, context : Context, src_path : &str, dst_path : &str) -> Result<(), GenError>{
 
-		let src_path = PathBuf::from(src_path);
-		let dst_path = PathBuf::from(dst_path);
+		let mut src_patha = self.template_path.clone();
+		let mut dst_patha = self.project_path.clone();
+		
+		src_patha.push(src_path);
+		dst_patha.push(dst_path);
 
-		if !src_path.exists() {
+		println!("Source file {}", src_patha.display());
+		println!("Destination file {}", dst_patha.display());
+
+		if !src_patha.exists() {
 
 			return Err(GenError::new("Source file doesn't exist"));
 			}
 
-		if !src_path.is_file() {
+		if !src_patha.is_file() {
 
 			return Err(GenError::new("Source is not a file"));
 			}
 
+		let result = self.tera.render(src_patha.to_str().unwrap(), &context).unwrap();
 
-		println!("Source file {}", src_path.display());
-		println!("Destination file {}", dst_path.display());
+		let mut file = match File::create(dst_patha.to_str().unwrap()) {
+	        Err(why) => panic!("couldn't create"),
+	        Ok(file) => file,
+	    	};
+
+	    match file.write_all(result.as_bytes()) {
+	        Err(why) => {
+	            panic!("couldn't write to")
+	        },
+	        Ok(_) => println!("successfully wrote to"),
+    	}
 
 		Ok(())
 	}
@@ -155,5 +179,40 @@ mod tests {
 
     	assert_eq!(project_path, generator.get_project_path());
     	assert_eq!(template_path, generator.get_template_path());
+    }
+
+    #[test]
+    fn source_doesnt_exist() {
+
+		let project_path = "./project";
+    	let template_path = "./template";
+    	let src_path = "src/file.a";
+    	let dst_path = "dst/file.b";
+
+		let context = Context::new();
+
+    	let generator = Generator::new(project_path, template_path);
+
+    	assert!(generator.generate_file(context, src_path, dst_path).is_err());
+    }
+
+    #[test]
+    fn source_is_directory() {
+
+    }
+
+	#[test]
+    fn source_is_empty() {
+
+    }
+
+    #[test]
+    fn destination_is_empty() {
+
+    }
+
+	#[test]
+    fn source_destination_is_empty() {
+
     }
 }
