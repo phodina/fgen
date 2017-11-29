@@ -14,6 +14,8 @@ extern "C" {
 
 Generator* generator_new(char const* project_path, char const* template_path);
 
+void generate_file(Generator* ptr, char const* src_path, char const* dst_path);
+
 void generator_free(Generator* ptr);
 
 
