@@ -2,9 +2,10 @@
 name = "generator"
 version = "0.1.0"
 authors = ["Petr Hodina <hodinapetr46@gmail.com>"]
+build = "build.rs"
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["dylib"]
 
 [build-dependencies]
 moz-cheddar = "0.4.0"

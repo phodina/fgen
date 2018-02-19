@@ -19,14 +19,19 @@ mod generator {
 	
 	use super::*;
 
-	#[no_mangle]
-	pub extern fn context_new () -> *mut Context {
+        #[repr(C)]
+        pub struct CGenerator(Generator);
+        #[repr(C)]
+        pub struct CContext(Context);
 
-    	Box::into_raw(Box::new(Context::new()))
+        #[no_mangle]
+        pub extern fn context_new () -> *mut CContext {
+
+        Box::into_raw(Box::new(CContext(Context::new())))
 	}
 
 	#[no_mangle]
-	pub extern fn context_add (ptr: *mut Context, key: *const libc::c_char, value: *const libc::c_char) {
+        pub extern fn context_add (ptr: *mut CContext, key: *const libc::c_char, value: *const libc::c_char) {
 		
 		let key = unsafe {
             assert!(!key.is_null());
@@ -47,18 +52,18 @@ mod generator {
             &mut *ptr
 			};
 
-		context.add(&key_str, &value_str);
+                context.0.add(&key_str, &value_str);
 	}
 	
 	#[no_mangle]
-	pub extern fn context_free (ptr: *mut Context) {
+        pub extern fn context_free (ptr: *mut CContext) {
 	
 		if ptr.is_null() { return }
 	    		unsafe { Box::from_raw(ptr); }
 			}
 
 	#[no_mangle]
-	pub extern fn generator_new(project_path : *const libc::c_char, template_path : *const libc::c_char) -> *mut Generator {
+        pub extern fn generator_new(project_path : *const libc::c_char, template_path : *const libc::c_char) -> *mut CGenerator {
     
     	let project_path = unsafe {
             assert!(!project_path.is_null());
@@ -74,11 +79,11 @@ mod generator {
 
 		let template_path_str = template_path.to_str().unwrap();
 
-    	Box::into_raw(Box::new(Generator::new(project_path_str, template_path_str)))
+        Box::into_raw(Box::new(CGenerator(Generator::new(project_path_str, template_path_str))))
 	}
 
 	#[no_mangle]
-	pub extern fn generate_file(ptr: *mut Generator, context: *mut Context, src_path : *const libc::c_char, dst_path : *const libc::c_char) {
+        pub extern fn generate_file(ptr: *mut CGenerator, context: *mut CContext, src_path : *const libc::c_char, dst_path : *const libc::c_char) {
 
 		let src_path = unsafe {
             assert!(!src_path.is_null());
@@ -101,14 +106,14 @@ mod generator {
 
 		let context = unsafe {
             assert!(!context.is_null());
-            &*context
+            & *context
 			};
 		
-		generator.generate_file(context, src_path_str, dst_path_str);
+                generator.0.generate_file(&context.0, src_path_str, dst_path_str);
 	}
 
 	#[no_mangle]
-	pub extern fn generator_free(ptr: *mut Generator) {
+        pub extern fn generator_free(ptr: *mut CGenerator) {
     	
     	if ptr.is_null() { return }
     		unsafe { Box::from_raw(ptr); }
@@ -148,7 +153,12 @@ impl Generator {
 
 	fn new (project_path : &str, template_path : &str) -> Self {
 
-    	let tera = compile_templates!("templates/**/*");
+        println!("Project path: {}", project_path);
+        println!("Template path: {}", template_path);
+    
+        let mut templates = template_path.to_owned();
+        templates.push_str("/**/*");
+    	let tera = compile_templates!(&templates);
 
 		Generator { project_path: PathBuf::from(project_path),
 					template_path: PathBuf::from(template_path),
