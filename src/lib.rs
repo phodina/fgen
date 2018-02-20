@@ -7,7 +7,7 @@ use std::ffi::CStr;
 use tera::Tera;
 use tera::Context;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::error::Error;
 use std::fmt;
 use std::io::prelude::*;
@@ -77,18 +77,18 @@ mod generator {
             CStr::from_ptr(project_path)
         };
 
-        let project_path_str = project_path.to_str().unwrap();
+        let project_path = Path::new(project_path.to_str().unwrap());
 
         let template_path = unsafe {
             assert!(!template_path.is_null());
             CStr::from_ptr(template_path)
         };
 
-        let template_path_str = template_path.to_str().unwrap();
+        let template_path = Path::new(template_path.to_str().unwrap());
 
         Box::into_raw(Box::new(CGenerator(Generator::new(
-            project_path_str,
-            template_path_str,
+            project_path,
+            template_path,
         ))))
     }
 
@@ -171,27 +171,27 @@ pub struct Generator {
 }
 
 impl Generator {
-    pub fn new(project_path: &str, template_path: &str) -> Self {
-        println!("Project path: {}", project_path);
-        println!("Template path: {}", template_path);
+    pub fn new(project_path: &Path, template_path: &Path) -> Self {
+        println!("Project path: {}", project_path.to_str().unwrap());
+        println!("Template path: {}", template_path.to_str().unwrap());
 
-        let mut templates = template_path.to_owned();
-        templates.push_str("/**/*");
-        let tera = compile_templates!(&templates);
+        let template_path = template_path.join("**/*");
+
+        let tera = compile_templates!(template_path.to_str().unwrap());
 
         Generator {
-            project_path: PathBuf::from(project_path),
-            template_path: PathBuf::from(template_path),
+            project_path: project_path.to_path_buf(),
+            template_path: template_path.to_path_buf(),
             tera: tera,
         }
     }
 
-    pub fn get_template_path(&self) -> &str {
-        self.template_path.to_str().unwrap()
+    pub fn get_template_path(&self) -> &Path {
+        &self.template_path
     }
 
-    pub fn get_project_path(&self) -> &str {
-        self.project_path.to_str().unwrap()
+    pub fn get_project_path(&self) -> &Path {
+        &self.project_path
     }
 
     pub fn generate_file(
@@ -238,12 +238,16 @@ impl Generator {
 #[cfg(test)]
 mod tests {
 
+    extern crate tempdir;
+
+    //    use tempdir::TempDir;
+
     use super::*;
 
     #[test]
     fn generator_initialization() {
-        let project_path = "./project";
-        let template_path = "./template";
+        let project_path = Path::new("./project");
+        let template_path = Path::new("./template");
 
         let generator = Generator::new(project_path, template_path);
 
@@ -253,8 +257,8 @@ mod tests {
 
     #[test]
     fn source_doesnt_exist() {
-        let project_path = "./project";
-        let template_path = "./template";
+        let project_path = Path::new("./project");
+        let template_path = Path::new("./template");
         let src_path = "src/file.a";
         let dst_path = "dst/file.b";
 
@@ -267,6 +271,33 @@ mod tests {
                 .generate_file(&context, src_path, dst_path)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn render_ok() {
+        let dir = tempdir::TempDir::new("render_ok").unwrap();
+        let project_path = dir.path();
+        let template_path = Path::new("./samples");
+
+        let src_path = "render_ok.txt";
+        let dst_path = "samples_ok.txt";
+
+        println!("Generator start");
+        let generator = Generator::new(project_path, template_path);
+
+        let mut context = Context::new();
+        context.add("msg", &"Hello World!");
+
+        generator
+            .generate_file(&context, src_path, dst_path)
+            .unwrap();
+
+        let mut file = File::open(dir.path().join("samples_ok.txt")).unwrap();
+        let mut content = String::new();
+
+        file.read_to_string(&mut content).unwrap();
+
+        assert_eq!(content, "Hello World!");
     }
 
     #[test]

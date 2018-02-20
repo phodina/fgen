@@ -10,6 +10,9 @@ crate-type = ["dylib"]
 [build-dependencies]
 moz-cheddar = "0.4.0"
 
+[dev-dependencies]
+tempdir = "0.3.6"
+
 [dependencies]
 tera = "0.10.10" 
 libc = "*"
