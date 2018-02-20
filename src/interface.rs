@@ -3,11 +3,12 @@ use std::ffi::CStr;
 use libc;
 use std::path::Path;
 
+use std::result::Result::{Err, Ok};
 use tera::Context;
 
 use generator::Generator;
 
-mod generator {
+pub mod generator {
 
     use super::*;
 
@@ -119,7 +120,10 @@ mod generator {
             &*context
         };
 
-        generator.0.generate_file(&context.0, src_path, dst_path);
+        match generator.0.generate_file(&context.0, src_path, dst_path) {
+            Ok(_) => (),
+            Err(e) => println!("{}", e),
+        }
     }
 
     #[no_mangle]
