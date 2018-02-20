@@ -4,27 +4,22 @@ use libc;
 use std::path::Path;
 
 use std::result::Result::{Err, Ok};
-use tera::Context;
+pub use tera::Context;
 
 use generator::Generator;
 
-pub mod generator {
+pub mod c_api {
 
     use super::*;
 
-    #[repr(C)]
-    pub struct CGenerator(Generator);
-    #[repr(C)]
-    pub struct CContext(Context);
-
     #[no_mangle]
-    pub extern "C" fn context_new() -> *mut CContext {
-        Box::into_raw(Box::new(CContext(Context::new())))
+    pub extern "C" fn context_new() -> *mut Context {
+        Box::into_raw(Box::new(Context::new()))
     }
 
     #[no_mangle]
     pub extern "C" fn context_add(
-        ptr: *mut CContext,
+        ptr: *mut Context,
         key: *const libc::c_char,
         value: *const libc::c_char,
     ) {
@@ -47,11 +42,11 @@ pub mod generator {
             &mut *ptr
         };
 
-        context.0.add(&key_str, &value_str);
+        context.add(&key_str, &value_str);
     }
 
     #[no_mangle]
-    pub extern "C" fn context_free(ptr: *mut CContext) {
+    pub extern "C" fn context_free(ptr: *mut Context) {
         if ptr.is_null() {
             return;
         }
@@ -64,7 +59,7 @@ pub mod generator {
     pub extern "C" fn generator_new(
         project_path: *const libc::c_char,
         template_path: *const libc::c_char,
-    ) -> *mut CGenerator {
+    ) -> *mut Generator {
         let project_path = unsafe {
             assert!(!project_path.is_null());
             CStr::from_ptr(project_path)
@@ -81,16 +76,13 @@ pub mod generator {
         let template_str = template_path.to_str().unwrap();
         let template_path = Path::new(template_str);
 
-        Box::into_raw(Box::new(CGenerator(Generator::new(
-            project_path,
-            template_path,
-        ))))
+        Box::into_raw(Box::new(Generator::new(project_path, template_path)))
     }
 
     #[no_mangle]
     pub extern "C" fn generate_file(
-        ptr: *mut CGenerator,
-        context: *mut CContext,
+        ptr: *mut Generator,
+        context: *mut Context,
         src_path: *const libc::c_char,
         dst_path: *const libc::c_char,
     ) {
@@ -120,14 +112,14 @@ pub mod generator {
             &*context
         };
 
-        match generator.0.generate_file(&context.0, src_path, dst_path) {
+        match generator.generate_file(&context, src_path, dst_path) {
             Ok(_) => (),
             Err(e) => println!("{}", e),
         }
     }
 
     #[no_mangle]
-    pub extern "C" fn generator_free(ptr: *mut CGenerator) {
+    pub extern "C" fn generator_free(ptr: *mut Generator) {
         if ptr.is_null() {
             return;
         }

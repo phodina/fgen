@@ -8,7 +8,7 @@ build = "build.rs"
 crate-type = ["dylib"]
 
 [build-dependencies]
-moz-cheddar = "0.4.0"
+cbindgen = "0.4.3"
 
 [dev-dependencies]
 tempdir = "0.3.6"
