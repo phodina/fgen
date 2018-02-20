@@ -48,10 +48,23 @@ impl Generator {
         src_path: &Path,
         dst_path: &Path,
     ) -> Result<(), Box<Error>> {
+    
         let src_path_str = src_path.to_str().unwrap();
+        let dst_path_empty = dst_path.to_str().unwrap();
+        
+        if src_path_str.is_empty() || dst_path_empty.is_empty() {
+        
+            // TODO: Return error
+            }
+            
         let result = self.tera.render(src_path_str, &context)?;
 
-        let dst_path_str = self.project_path.join(dst_path);
+        
+
+        let dst_path_str = match dst_path_empty.is_empty() {
+            true => self.project_path.join(src_path),
+            false => self.project_path.join(dst_path)
+            };
 
         let mut file = File::create(dst_path_str)?;
 
@@ -126,6 +139,45 @@ mod tests {
     }
 
     #[test]
+    fn src_path_empty () {
+        let dir = tempdir::TempDir::new("render_ok").unwrap();
+        let project_path = dir.path();
+        let template_path = Path::new("samples");
+
+        let src_path = Path::new("");
+        let dst_path = Path::new("render_ok.txt");
+
+        let generator = Generator::new(project_path, template_path);
+
+        let mut context = Context::new();
+        context.add("msg", &"Hello World!");
+
+        assert!(generator
+            .generate_file(&context, src_path, dst_path).is_err());
+    }
+    
+    #[test]
+    fn dst_path_empty () {
+        let dir = tempdir::TempDir::new("render_ok").unwrap();
+        let project_path = dir.path();
+        let template_path = Path::new("samples");
+
+        let src_path = Path::new("render_ok.txt");
+        let dst_path = Path::new("");
+
+        let generator = Generator::new(project_path, template_path);
+
+        let mut context = Context::new();
+        context.add("msg", &"Hello World!");
+
+        assert!(generator
+            .generate_file(&context, src_path, dst_path).is_err());
+    }
+    /*
+    #[test]
+    fn dst_path_nested_empty () {}
+    
+    #[test]
     fn source_is_directory() {}
 
     #[test]
@@ -136,4 +188,5 @@ mod tests {
 
     #[test]
     fn source_destination_is_empty() {}
+    */
 }
