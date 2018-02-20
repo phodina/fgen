@@ -77,14 +77,16 @@ mod generator {
             CStr::from_ptr(project_path)
         };
 
-        let project_path = Path::new(project_path.to_str().unwrap());
+        let project_str = project_path.to_str().unwrap();
+        let project_path = Path::new(project_str);
 
         let template_path = unsafe {
             assert!(!template_path.is_null());
             CStr::from_ptr(template_path)
         };
 
-        let template_path = Path::new(template_path.to_str().unwrap());
+        let template_str = template_path.to_str().unwrap();
+        let template_path = Path::new(template_str);
 
         Box::into_raw(Box::new(CGenerator(Generator::new(
             project_path,
@@ -105,6 +107,7 @@ mod generator {
         };
 
         let src_path_str = src_path.to_str().unwrap();
+        let src_path = Path::new(src_path_str);
 
         let dst_path = unsafe {
             assert!(!dst_path.is_null());
@@ -112,6 +115,7 @@ mod generator {
         };
 
         let dst_path_str = dst_path.to_str().unwrap();
+        let dst_path = Path::new(dst_path_str);
 
         let generator = unsafe {
             assert!(!ptr.is_null());
@@ -123,9 +127,7 @@ mod generator {
             &*context
         };
 
-        generator
-            .0
-            .generate_file(&context.0, src_path_str, dst_path_str);
+        generator.0.generate_file(&context.0, src_path, dst_path);
     }
 
     #[no_mangle]
@@ -137,31 +139,7 @@ mod generator {
             Box::from_raw(ptr);
         }
     }
-}
 
-#[derive(Debug)]
-pub struct GenError {
-    details: String,
-}
-
-impl GenError {
-    fn new(msg: &str) -> GenError {
-        GenError {
-            details: msg.to_string(),
-        }
-    }
-}
-
-impl fmt::Display for GenError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
-    }
-}
-
-impl Error for GenError {
-    fn description(&self) -> &str {
-        &self.details
-    }
 }
 
 pub struct Generator {
@@ -172,12 +150,18 @@ pub struct Generator {
 
 impl Generator {
     pub fn new(project_path: &Path, template_path: &Path) -> Self {
-        println!("Project path: {}", project_path.to_str().unwrap());
-        println!("Template path: {}", template_path.to_str().unwrap());
+        if !project_path.exists() {
+            println!("Project path doesn't exist!");
+        }
 
-        let template_path = template_path.join("**/*");
+        if !template_path.exists() {
+            println!("Template path doesn't exist");
+        }
 
-        let tera = compile_templates!(template_path.to_str().unwrap());
+        let template_pattern = template_path.join("**/*");
+        let template_pattern_str = template_pattern.to_str().unwrap();
+
+        let tera = compile_templates!(template_pattern_str);
 
         Generator {
             project_path: project_path.to_path_buf(),
@@ -197,39 +181,17 @@ impl Generator {
     pub fn generate_file(
         &self,
         context: &Context,
-        src_path: &str,
-        dst_path: &str,
-    ) -> Result<(), GenError> {
-        let mut src_patha = self.template_path.clone();
-        let mut dst_patha = self.project_path.clone();
+        src_path: &Path,
+        dst_path: &Path,
+    ) -> Result<(), Box<Error>> {
+        let src_path_str = src_path.to_str().unwrap();
+        let result = self.tera.render(src_path_str, &context)?;
 
-        src_patha.push(src_path);
-        dst_patha.push(dst_path);
+        let dst_path_str = self.project_path.join(dst_path);
 
-        println!("Source file {}", src_patha.display());
-        println!("Destination file {}", dst_patha.display());
+        let mut file = File::create(dst_path_str)?;
 
-        if !src_patha.exists() {
-            return Err(GenError::new("Source file doesn't exist"));
-        }
-
-        if !src_patha.is_file() {
-            return Err(GenError::new("Source is not a file"));
-        }
-
-        let result = self.tera
-            .render(src_patha.to_str().unwrap(), &context)
-            .unwrap();
-
-        let mut file = match File::create(dst_patha.to_str().unwrap()) {
-            Err(why) => panic!("couldn't create"),
-            Ok(file) => file,
-        };
-
-        match file.write_all(result.as_bytes()) {
-            Err(why) => panic!("couldn't write to"),
-            Ok(_) => println!("successfully wrote to"),
-        }
+        file.write_all(result.as_bytes())?;
 
         Ok(())
     }
@@ -240,14 +202,13 @@ mod tests {
 
     extern crate tempdir;
 
-    //    use tempdir::TempDir;
-
     use super::*;
 
     #[test]
     fn generator_initialization() {
-        let project_path = Path::new("./project");
-        let template_path = Path::new("./template");
+        let dir = tempdir::TempDir::new("initialization").unwrap();
+        let project_path = dir.path();
+        let template_path = Path::new("samples");
 
         let generator = Generator::new(project_path, template_path);
 
@@ -257,10 +218,11 @@ mod tests {
 
     #[test]
     fn source_doesnt_exist() {
-        let project_path = Path::new("./project");
-        let template_path = Path::new("./template");
-        let src_path = "src/file.a";
-        let dst_path = "dst/file.b";
+        let dir = tempdir::TempDir::new("doesnt_exist").unwrap();
+        let project_path = dir.path();
+        let template_path = Path::new("samples");
+        let src_path = Path::new("src/file.a");
+        let dst_path = Path::new("dst/file.b");
 
         let context = Context::new();
 
@@ -277,12 +239,11 @@ mod tests {
     fn render_ok() {
         let dir = tempdir::TempDir::new("render_ok").unwrap();
         let project_path = dir.path();
-        let template_path = Path::new("./samples");
+        let template_path = Path::new("samples");
 
-        let src_path = "render_ok.txt";
-        let dst_path = "samples_ok.txt";
+        let src_path = Path::new("render_ok.txt");
+        let dst_path = Path::new("samples_ok.txt");
 
-        println!("Generator start");
         let generator = Generator::new(project_path, template_path);
 
         let mut context = Context::new();
@@ -297,7 +258,7 @@ mod tests {
 
         file.read_to_string(&mut content).unwrap();
 
-        assert_eq!(content, "Hello World!");
+        assert_eq!(content, "Hello World!\n");
     }
 
     #[test]
