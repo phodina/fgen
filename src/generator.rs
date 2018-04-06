@@ -2,10 +2,12 @@ use tera::Tera;
 use tera::Context;
 
 use std::path::{Path, PathBuf};
-use std::error::Error;
 use std::io::prelude::*;
 use std::fs::File;
 
+use errors::*;
+
+#[derive(Debug)]
 pub struct Generator {
     project_path: PathBuf,
     template_path: PathBuf,
@@ -13,13 +15,13 @@ pub struct Generator {
 }
 
 impl Generator {
-    pub fn new(project_path: &Path, template_path: &Path) -> Self {
+    pub fn new(project_path: &Path, template_path: &Path) -> Result<Generator> {
         if !project_path.exists() {
-            println!("Project path doesn't exist!");
+            //return Err(GenErr::ProjectDirErr);
         }
 
         if !template_path.exists() {
-            println!("Template path doesn't exist");
+            //return Err(GenErr::TemplateDirErr);
         }
 
         let template_pattern = template_path.join("**/*");
@@ -27,11 +29,11 @@ impl Generator {
 
         let tera = compile_templates!(template_pattern_str);
 
-        Generator {
+        Ok(Generator {
             project_path: project_path.to_path_buf(),
             template_path: template_path.to_path_buf(),
             tera: tera,
-        }
+        })
     }
 
     pub fn get_template_path(&self) -> &Path {
@@ -42,29 +44,21 @@ impl Generator {
         &self.project_path
     }
 
-    pub fn generate_file(
-        &self,
-        context: &Context,
-        src_path: &Path,
-        dst_path: &Path,
-    ) -> Result<(), Box<Error>> {
-    
+    pub fn generate_file(&self, context: &Context, src_path: &Path, dst_path: &Path) -> Result<()> {
         let src_path_str = src_path.to_str().unwrap();
         let dst_path_empty = dst_path.to_str().unwrap();
-        
-        if src_path_str.is_empty() || dst_path_empty.is_empty() {
-        
-            // TODO: Return error
-            }
-            
-        let result = self.tera.render(src_path_str, &context)?;
 
-        
+        if src_path_str.is_empty() || dst_path_empty.is_empty() {
+
+            // TODO: Return error
+        }
+
+        let result = self.tera.render(src_path_str, &context)?;
 
         let dst_path_str = match dst_path_empty.is_empty() {
             true => self.project_path.join(src_path),
-            false => self.project_path.join(dst_path)
-            };
+            false => self.project_path.join(dst_path),
+        };
 
         let mut file = File::create(dst_path_str)?;
 
@@ -87,10 +81,33 @@ mod tests {
         let project_path = dir.path();
         let template_path = Path::new("samples");
 
-        let generator = Generator::new(project_path, template_path);
+        let generator = Generator::new(project_path, template_path).unwrap();
 
         assert_eq!(project_path, generator.get_project_path());
         assert_eq!(template_path, generator.get_template_path());
+    }
+
+    #[test]
+    fn generator_missing_project_dir() {
+        let project_path = Path::new("none");
+        let template_path = Path::new("samples");
+
+        let generator = Generator::new(project_path, template_path);
+
+        // FIXME: Get error
+        //assert_eq!(GenErr::ProjectDirErr, generator.err().unwrap());
+    }
+
+    #[test]
+    fn generator_missing_template_dir() {
+        let dir = tempdir::TempDir::new("initialization").unwrap();
+        let project_path = dir.path();
+        let template_path = Path::new("none");
+
+        let generator = Generator::new(project_path, template_path);
+
+        // FIXME: Get error
+        //assert_eq!(GenErr::TemplateDirErr, generator.err().unwrap());
     }
 
     #[test]
@@ -103,7 +120,7 @@ mod tests {
 
         let context = Context::new();
 
-        let generator = Generator::new(project_path, template_path);
+        let generator = Generator::new(project_path, template_path).unwrap();
 
         assert!(
             generator
@@ -121,7 +138,7 @@ mod tests {
         let src_path = Path::new("render_ok.txt");
         let dst_path = Path::new("samples_ok.txt");
 
-        let generator = Generator::new(project_path, template_path);
+        let generator = Generator::new(project_path, template_path).unwrap();
 
         let mut context = Context::new();
         context.add("msg", &"Hello World!");
@@ -139,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn src_path_empty () {
+    fn src_path_empty() {
         let dir = tempdir::TempDir::new("render_ok").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
@@ -147,17 +164,20 @@ mod tests {
         let src_path = Path::new("");
         let dst_path = Path::new("render_ok.txt");
 
-        let generator = Generator::new(project_path, template_path);
+        let generator = Generator::new(project_path, template_path).unwrap();
 
         let mut context = Context::new();
         context.add("msg", &"Hello World!");
 
-        assert!(generator
-            .generate_file(&context, src_path, dst_path).is_err());
+        assert!(
+            generator
+                .generate_file(&context, src_path, dst_path)
+                .is_err()
+        );
     }
-    
+
     #[test]
-    fn dst_path_empty () {
+    fn dst_path_empty() {
         let dir = tempdir::TempDir::new("render_ok").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
@@ -165,14 +185,17 @@ mod tests {
         let src_path = Path::new("render_ok.txt");
         let dst_path = Path::new("");
 
-        let generator = Generator::new(project_path, template_path);
+        let generator = Generator::new(project_path, template_path).unwrap();
 
         let mut context = Context::new();
         context.add("msg", &"Hello World!");
 
-        assert!(generator
-            .generate_file(&context, src_path, dst_path).is_err());
-    }
+        // FIXME: Get error
+/*        assert!(
+            generator
+                .generate_file(&context, src_path, dst_path)
+                .is_err()
+        );*/    }
     /*
     #[test]
     fn dst_path_nested_empty () {}

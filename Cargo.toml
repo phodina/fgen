@@ -5,14 +5,20 @@ authors = ["Petr Hodina <hodinapetr46@gmail.com>"]
 build = "build.rs"
 
 [lib]
-crate-type = ["dylib"]
+crate-type = ["dylib", "rlib"]
+
+[features]
+default=[]
+cc = ["cbindgen", "libc"]
 
 [build-dependencies]
-cbindgen = "0.4.3"
+cbindgen = { version = "0.4.3", optional = true }
+libc = { version = "*", optional = true }
 
 [dev-dependencies]
 tempdir = "0.3.6"
 
 [dependencies]
+error-chain = "0.11.0"
 tera = "0.10.10" 
-libc = "*"
+log = "0.4.1"

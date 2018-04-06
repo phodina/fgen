@@ -76,7 +76,9 @@ pub mod c_api {
         let template_str = template_path.to_str().unwrap();
         let template_path = Path::new(template_str);
 
-        Box::into_raw(Box::new(Generator::new(project_path, template_path)))
+        Box::into_raw(Box::new(
+            Generator::new(project_path, template_path).unwrap(),
+        ))
     }
 
     #[no_mangle]
