@@ -3,7 +3,8 @@ use tera::Context;
 
 use std::path::{Path, PathBuf};
 use std::io::prelude::*;
-use std::fs::File;
+use std::fs::OpenOptions;
+use std::fs;
 
 use errors::*;
 
@@ -17,11 +18,11 @@ pub struct Generator {
 impl Generator {
     pub fn new(project_path: &Path, template_path: &Path) -> Result<Generator> {
         if !project_path.exists() {
-            //return Err(GenErr::ProjectDirErr);
+            return Err(ErrorKind::ProjectDirErr(project_path.to_str().unwrap_or("Project path error").to_owned()).into());
         }
 
         if !template_path.exists() {
-            //return Err(GenErr::TemplateDirErr);
+            return Err(ErrorKind::TemplateDirErr(project_path.to_str().unwrap_or("Template path error").to_owned()).into());
         }
 
         let template_pattern = template_path.join("**/*");
@@ -45,24 +46,38 @@ impl Generator {
     }
 
     pub fn generate_file(&self, context: &Context, src_path: &Path, dst_path: &Path) -> Result<()> {
-        let src_path_str = src_path.to_str().unwrap();
-        let dst_path_empty = dst_path.to_str().unwrap();
+        let src_path_str = src_path.to_str().ok_or("Invalid src path")?;
+        let dst_path_str = dst_path.to_str().ok_or("Invalid dst path")?;
 
-        if src_path_str.is_empty() || dst_path_empty.is_empty() {
-
-            // TODO: Return error
+        if src_path_str.is_empty() {
+            error!("Invalid src path {} ", src_path_str); 
+            return Err(ErrorKind::SrcPathErr(src_path_str.to_owned()).into());
         }
 
-        let result = self.tera.render(src_path_str, &context)?;
+        if dst_path_str.is_empty() {
+            error!("Generating {} ...", dst_path_str);
+            return Err(ErrorKind::DstPathErr(dst_path_str.to_owned()).into());
+        }
 
-        let dst_path_str = match dst_path_empty.is_empty() {
+        let mut dst_exists = self.project_path.clone();
+        dst_exists.push(dst_path);
+
+        if !dst_exists.parent().unwrap().exists() {
+            info!("Create dirs {} ", dst_exists.parent().unwrap().to_str().unwrap()); 
+            fs::create_dir(dst_exists.parent().unwrap()).chain_err(|| "Failed to create dirs")?;
+        }
+
+        let result = self.tera.render(src_path_str, &context).chain_err(|| "Failed to render file")?;
+
+        let dst_path_string = match dst_path_str.is_empty() {
             true => self.project_path.join(src_path),
             false => self.project_path.join(dst_path),
         };
 
-        let mut file = File::create(dst_path_str)?;
+        let mut file = OpenOptions::new().read(true).write(true).create(true).open(dst_path_string).chain_err(|| "Failed to open file")?;
 
         file.write_all(result.as_bytes())?;
+        info!("Template {} rendered into {} ", src_path_str, dst_path_str);
 
         Ok(())
     }
@@ -74,9 +89,11 @@ mod tests {
     extern crate tempdir;
 
     use super::*;
+    use std::fs::File;
 
     #[test]
-    fn generator_initialization() {
+    fn initialization_ok () {
+
         let dir = tempdir::TempDir::new("initialization").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
@@ -88,49 +105,79 @@ mod tests {
     }
 
     #[test]
-    fn generator_missing_project_dir() {
+    fn missing_project_dir() {
+
         let project_path = Path::new("none");
         let template_path = Path::new("samples");
 
-        let generator = Generator::new(project_path, template_path);
+        let generator_err = Generator::new(project_path, template_path).err().unwrap();
 
-        // FIXME: Get error
-        //assert_eq!(GenErr::ProjectDirErr, generator.err().unwrap());
+        match generator_err.kind() {
+            &ErrorKind::ProjectDirErr(_) => assert!(true),
+            &_ => assert!(false, "Expected ProjectDirErr"),
+        }
     }
 
     #[test]
-    fn generator_missing_template_dir() {
+    fn missing_template_dir() {
+
         let dir = tempdir::TempDir::new("initialization").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("none");
 
-        let generator = Generator::new(project_path, template_path);
+        let generator_err = Generator::new(project_path, template_path).err().unwrap();
 
-        // FIXME: Get error
-        //assert_eq!(GenErr::TemplateDirErr, generator.err().unwrap());
+        match generator_err.kind() {
+            &ErrorKind::TemplateDirErr(_) => assert!(true),
+            &_ => assert!(false, "Expected TemplateDirErr"),
+        }
     }
 
     #[test]
-    fn source_doesnt_exist() {
+    fn missing_src_path() {
+
         let dir = tempdir::TempDir::new("doesnt_exist").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
-        let src_path = Path::new("src/file.a");
+        let src_path = Path::new("");
         let dst_path = Path::new("dst/file.b");
 
         let context = Context::new();
 
         let generator = Generator::new(project_path, template_path).unwrap();
 
-        assert!(
-            generator
-                .generate_file(&context, src_path, dst_path)
-                .is_err()
-        );
+        let err = generator.generate_file(&context, src_path, dst_path).err().unwrap();
+
+        match err.kind() {
+            &ErrorKind::SrcPathErr(_) => (),
+            &_ => assert!(false, "Expected SrcPathErr"),
+        }
+    }
+
+    #[test]
+    fn missing_dst_path() {
+
+        let dir = tempdir::TempDir::new("doesnt_exist").unwrap();
+        let project_path = dir.path();
+        let template_path = Path::new("samples");
+        let src_path = Path::new("src/file.a");
+        let dst_path = Path::new("");
+
+        let context = Context::new();
+
+        let generator = Generator::new(project_path, template_path).unwrap();
+
+        let err = generator.generate_file(&context, src_path, dst_path).err().unwrap();
+
+        match err.kind() {
+            &ErrorKind::DstPathErr(_) => (),
+            &_ => assert!(false),
+        }
     }
 
     #[test]
     fn render_ok() {
+
         let dir = tempdir::TempDir::new("render_ok").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
@@ -156,60 +203,29 @@ mod tests {
     }
 
     #[test]
-    fn src_path_empty() {
-        let dir = tempdir::TempDir::new("render_ok").unwrap();
-        let project_path = dir.path();
-        let template_path = Path::new("samples");
+    fn render_nested_ok() {
 
-        let src_path = Path::new("");
-        let dst_path = Path::new("render_ok.txt");
-
-        let generator = Generator::new(project_path, template_path).unwrap();
-
-        let mut context = Context::new();
-        context.add("msg", &"Hello World!");
-
-        assert!(
-            generator
-                .generate_file(&context, src_path, dst_path)
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn dst_path_empty() {
         let dir = tempdir::TempDir::new("render_ok").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
 
         let src_path = Path::new("render_ok.txt");
-        let dst_path = Path::new("");
+        let dst_path = Path::new("nested/samples_ok.txt");
 
         let generator = Generator::new(project_path, template_path).unwrap();
 
         let mut context = Context::new();
         context.add("msg", &"Hello World!");
 
-        // FIXME: Get error
-/*        assert!(
-            generator
-                .generate_file(&context, src_path, dst_path)
-                .is_err()
-        );*/    }
-    /*
-    #[test]
-    fn dst_path_nested_empty () {}
-    
-    #[test]
-    fn source_is_directory() {}
+        generator
+            .generate_file(&context, src_path, dst_path)
+            .unwrap();
 
-    #[test]
-    fn source_is_empty() {}
+        let mut file = File::open(dir.path().join("nested/samples_ok.txt")).unwrap();
+        let mut content = String::new();
 
-    #[test]
-    fn destination_is_empty() {}
+        file.read_to_string(&mut content).unwrap();
 
-    #[test]
-    fn source_destination_is_empty() {}
-    */
+        assert_eq!(content, "Hello World!\n");
+    }
 }

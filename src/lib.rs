@@ -2,13 +2,16 @@
 extern crate error_chain;
 #[cfg(feature = "cc")]
 extern crate libc;
-extern crate log;
 #[macro_use]
 extern crate tera;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+
 #[cfg(feature = "cc")]
 pub mod interface;
 pub mod generator;
-mod errors;
+pub mod errors;
 #[cfg(feature = "cc")]
 pub use interface::*;
 pub use generator::*;
