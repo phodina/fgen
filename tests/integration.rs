@@ -16,4 +16,5 @@ fn as_json() {
     let context = Context::new();
 
     gen.generate_file(&context, src_file, dst_file).unwrap();
+    let generated_path = project_path.cl
 }

@@ -18,11 +18,21 @@ pub struct Generator {
 impl Generator {
     pub fn new(project_path: &Path, template_path: &Path) -> Result<Generator> {
         if !project_path.exists() {
-            return Err(ErrorKind::ProjectDirErr(project_path.to_str().unwrap_or("Project path error").to_owned()).into());
+            return Err(ErrorKind::ProjectDirErr(
+                project_path
+                    .to_str()
+                    .unwrap_or("Project path error")
+                    .to_owned(),
+            ).into());
         }
 
         if !template_path.exists() {
-            return Err(ErrorKind::TemplateDirErr(project_path.to_str().unwrap_or("Template path error").to_owned()).into());
+            return Err(ErrorKind::TemplateDirErr(
+                template_path
+                    .to_str()
+                    .unwrap_or("Template path error")
+                    .to_owned(),
+            ).into());
         }
 
         let template_pattern = template_path.join("**/*");
@@ -50,7 +60,7 @@ impl Generator {
         let dst_path_str = dst_path.to_str().ok_or("Invalid dst path")?;
 
         if src_path_str.is_empty() {
-            error!("Invalid src path {} ", src_path_str); 
+            error!("Invalid src path {} ", src_path_str);
             return Err(ErrorKind::SrcPathErr(src_path_str.to_owned()).into());
         }
 
@@ -63,18 +73,28 @@ impl Generator {
         dst_exists.push(dst_path);
 
         if !dst_exists.parent().unwrap().exists() {
-            info!("Create dirs {} ", dst_exists.parent().unwrap().to_str().unwrap()); 
+            info!(
+                "Create dirs {} ",
+                dst_exists.parent().unwrap().to_str().unwrap()
+            );
             fs::create_dir(dst_exists.parent().unwrap()).chain_err(|| "Failed to create dirs")?;
         }
 
-        let result = self.tera.render(src_path_str, &context).chain_err(|| "Failed to render file")?;
+        let result = self.tera
+            .render(src_path_str, &context)
+            .chain_err(|| format!("Failed to render file {}", src_path_str))?;
 
         let dst_path_string = match dst_path_str.is_empty() {
             true => self.project_path.join(src_path),
             false => self.project_path.join(dst_path),
         };
 
-        let mut file = OpenOptions::new().read(true).write(true).create(true).open(dst_path_string).chain_err(|| "Failed to open file")?;
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(dst_path_string)
+            .chain_err(|| "Failed to open file")?;
 
         file.write_all(result.as_bytes())?;
         info!("Template {} rendered into {} ", src_path_str, dst_path_str);
@@ -92,8 +112,7 @@ mod tests {
     use std::fs::File;
 
     #[test]
-    fn initialization_ok () {
-
+    fn initialization_ok() {
         let dir = tempdir::TempDir::new("initialization").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
@@ -106,7 +125,6 @@ mod tests {
 
     #[test]
     fn missing_project_dir() {
-
         let project_path = Path::new("none");
         let template_path = Path::new("samples");
 
@@ -120,7 +138,6 @@ mod tests {
 
     #[test]
     fn missing_template_dir() {
-
         let dir = tempdir::TempDir::new("initialization").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("none");
@@ -135,7 +152,6 @@ mod tests {
 
     #[test]
     fn missing_src_path() {
-
         let dir = tempdir::TempDir::new("doesnt_exist").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
@@ -146,7 +162,10 @@ mod tests {
 
         let generator = Generator::new(project_path, template_path).unwrap();
 
-        let err = generator.generate_file(&context, src_path, dst_path).err().unwrap();
+        let err = generator
+            .generate_file(&context, src_path, dst_path)
+            .err()
+            .unwrap();
 
         match err.kind() {
             &ErrorKind::SrcPathErr(_) => (),
@@ -156,7 +175,6 @@ mod tests {
 
     #[test]
     fn missing_dst_path() {
-
         let dir = tempdir::TempDir::new("doesnt_exist").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
@@ -167,7 +185,10 @@ mod tests {
 
         let generator = Generator::new(project_path, template_path).unwrap();
 
-        let err = generator.generate_file(&context, src_path, dst_path).err().unwrap();
+        let err = generator
+            .generate_file(&context, src_path, dst_path)
+            .err()
+            .unwrap();
 
         match err.kind() {
             &ErrorKind::DstPathErr(_) => (),
@@ -177,7 +198,6 @@ mod tests {
 
     #[test]
     fn render_ok() {
-
         let dir = tempdir::TempDir::new("render_ok").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
@@ -204,7 +224,6 @@ mod tests {
 
     #[test]
     fn render_nested_ok() {
-
         let dir = tempdir::TempDir::new("render_ok").unwrap();
         let project_path = dir.path();
         let template_path = Path::new("samples");
