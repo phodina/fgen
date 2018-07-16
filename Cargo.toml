@@ -3,6 +3,11 @@ name = "generator"
 version = "0.1.0"
 authors = ["Petr Hodina <hodinapetr46@gmail.com>"]
 build = "build.rs"
+description="Generate file based on template"
+readme = "README.md"
+license = "MIT/Apache-2.0"
+repository = "https://github.com/phodina/generator"
+homepage = "https://github.com/phodina/generator"
 
 [lib]
 crate-type = ["dylib", "rlib"]
